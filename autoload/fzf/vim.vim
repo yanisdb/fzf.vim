@@ -31,18 +31,19 @@ set cpo&vim
 let s:min_version = '0.23.0'
 let s:is_win = has('win32') || has('win64')
 let s:layout_keys = ['window', 'up', 'down', 'left', 'right']
-let s:bin_dir = expand('<sfile>:p:h:h:h').'/bin/'
-let s:bin = {
-\ 'preview': s:bin_dir.'preview.sh',
-\ 'tags':    s:bin_dir.'tags.pl' }
-let s:TYPE = {'dict': type({}), 'funcref': type(function('call')), 'string': type(''), 'list': type([])}
+let s:bin_dir = expand('<sfile>:p:h:h:h')
 if s:is_win
-  if has('nvim')
-    let s:bin.preview = split(system('for %A in ("'.s:bin.preview.'") do @echo %~sA'), "\n")[0]
-  else
-    let s:bin.preview = fnamemodify(s:bin.preview, ':8')
-  endif
+  let s:bin_dir = s:bin_dir . '\bin\'
+  let s:bin = {
+  \ 'preview': s:bin_dir.'preview.ps1',
+  \ 'tags':    s:bin_dir.'tags.pl' }
+else
+  let s:bin_dir = s:bin_dir . '/bin/'
+  let s:bin = {
+  \ 'preview': s:bin_dir.'preview.sh',
+  \ 'tags':    s:bin_dir.'tags.pl' }
 endif
+let s:TYPE = {'dict': type({}), 'funcref': type(function('call')), 'string': type(''), 'list': type([])}
 
 let s:wide = 120
 let s:warned = 0
@@ -127,7 +128,7 @@ function! fzf#vim#with_preview(...)
     call remove(args, 0)
   endif
 
-  if !executable('bash')
+  if !executable('bash') && !s:is_win
     if !s:warned
       call s:warn('Preview window not supported (bash not found in PATH)')
       let s:warned = 1
@@ -135,8 +136,20 @@ function! fzf#vim#with_preview(...)
     return spec
   endif
 
+  if !executable('powershell') && s:is_win
+    if !s:warned
+      call s:warn('Preview window not supported (powershell not found in PATH)')
+      let s:warned = 1
+    endif
+    return spec
+  endif
+
   " Placeholder expression (TODO/TBD: undocumented)
   let placeholder = get(spec, 'placeholder', '{}')
+  if s:is_win
+    let placeholder = '"'.placeholder.'"'
+  endif
+
 
   " Preview window
   if len(args) && type(args[0]) == s:TYPE.string
@@ -152,10 +165,7 @@ function! fzf#vim#with_preview(...)
     let preview += ['--preview-window', window]
   endif
   if s:is_win
-    let is_wsl_bash = exepath('bash') =~? 'Windows[/\\]system32[/\\]bash.exe$'
-    let preview_cmd = 'bash '.(is_wsl_bash
-    \ ? substitute(substitute(s:bin.preview, '^\([A-Z]\):', '/mnt/\L\1', ''), '\', '/', 'g')
-    \ : escape(s:bin.preview, '\'))
+    let preview_cmd = 'powershell -File '.s:bin.preview
   else
     let preview_cmd = fzf#shellescape(s:bin.preview)
   endif
